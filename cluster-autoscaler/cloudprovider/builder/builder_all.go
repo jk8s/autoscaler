@@ -29,6 +29,7 @@ import (
 	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider/gce"
 	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider/magnum"
 	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider/packet"
+	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider/vsphere"
 	"k8s.io/autoscaler/cluster-autoscaler/config"
 )
 
@@ -65,6 +66,8 @@ func buildCloudProvider(opts config.AutoscalingOptions, do cloudprovider.NodeGro
 		return magnum.BuildMagnum(opts, do, rl)
 	case packet.ProviderName:
 		return packet.BuildPacket(opts, do, rl)
+	case vsphere.ProviderName:
+		return vsphere.BuildVsphere(opts, do, rl)
 	case clusterapi.ProviderName:
 		return clusterapi.BuildClusterAPI(opts, do, rl)
 	}
