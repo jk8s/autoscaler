@@ -1,6 +1,9 @@
 package vsphere
 
 import (
+	"io"
+	"os"
+
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider"
@@ -21,9 +24,9 @@ type vsphereCloudProvider struct {
 	nodeGroups      []vsphereNodeGroup
 }
 
-func newVsphereCloudProvider(vsphereManager *vsphereManager, resourceLimiter *cloudprovider.ResourceLimiter) (cloudprovider.CloudProvider, error) {
+func newVsphereCloudProvider(vsphereManager vsphereManager, resourceLimiter *cloudprovider.ResourceLimiter) (cloudprovider.CloudProvider, error) {
 	vcp := &vsphereCloudProvider{
-		vsphereManager:  vsphereManager,
+		vsphereManager:  &vsphereManager,
 		resourceLimiter: resourceLimiter,
 		nodeGroups:      []vsphereNodeGroup{},
 	}
@@ -88,7 +91,18 @@ func (vcp *vsphereCloudProvider) Refresh() error {
 
 // BuildVsphere is called by the autoscaler to build a vsphere cloud provider
 func BuildVsphere(opts config.AutoscalingOptions, do cloudprovider.NodeGroupDiscoveryOptions, rl *cloudprovider.ResourceLimiter) cloudprovider.CloudProvider {
-	manager, err := newVsphereManager()
+	var config io.ReadCloser
+
+	if opts.CloudConfig != "" {
+		var err error
+		config, err = os.Open(opts.CloudConfig)
+		if err != nil {
+			klog.Fatalf("Couldn't open cloud provider configuration %s: %#v", opts.CloudConfig, err)
+		}
+		defer config.Close()
+	}
+
+	manager, err := createVsphereManager(config, do, opts)
 	if err != nil {
 		klog.Fatalf("Failed to create vsphere manager: %v", err)
 	}
