@@ -24,9 +24,9 @@ type vsphereCloudProvider struct {
 	nodeGroups      []vsphereNodeGroup
 }
 
-func newVsphereCloudProvider(vsphereManager vsphereManager, resourceLimiter *cloudprovider.ResourceLimiter) (cloudprovider.CloudProvider, error) {
+func newVsphereCloudProvider(vsphereManager *vsphereManager, resourceLimiter *cloudprovider.ResourceLimiter) (cloudprovider.CloudProvider, error) {
 	vcp := &vsphereCloudProvider{
-		vsphereManager:  &vsphereManager,
+		vsphereManager:  vsphereManager,
 		resourceLimiter: resourceLimiter,
 		nodeGroups:      []vsphereNodeGroup{},
 	}
@@ -102,7 +102,7 @@ func BuildVsphere(opts config.AutoscalingOptions, do cloudprovider.NodeGroupDisc
 		defer config.Close()
 	}
 
-	manager, err := createVsphereManager(config, do, opts)
+	manager, err := newVsphereManager(config, do, opts)
 	if err != nil {
 		klog.Fatalf("Failed to create vsphere manager: %v", err)
 	}
@@ -111,6 +111,5 @@ func BuildVsphere(opts config.AutoscalingOptions, do cloudprovider.NodeGroupDisc
 	if err != nil {
 		klog.Fatalf("Failed to create vsphere cloud provider: %v", err)
 	}
-	klog.Fatalf("vSphere cloud provider is not implemented yet")
 	return provider
 }

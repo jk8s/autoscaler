@@ -1,12 +1,12 @@
 package vsphere
 
 import (
-	"fmt"
 	"io"
-	"os"
 
+	"gopkg.in/gcfg.v1"
 	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider"
 	"k8s.io/autoscaler/cluster-autoscaler/config"
+	"k8s.io/klog"
 	schedulernodeinfo "k8s.io/kubernetes/pkg/scheduler/nodeinfo"
 )
 
@@ -22,27 +22,58 @@ type nodeRef struct {
 	ips []string
 }
 
-// vsphereManager is an interface for basic interaction with the cluster
-type vsphereManager interface{
-	nodeGroupSize(nodegroup string) (int, error)
-	createNodes(nodegroup string, nodes int) error
-	getNodes(nodegroup string) ([]string, error)
-	getNodeNames(nodegroup string) ([]string, error)
-	deleteNodes(nodegroup string, nodes []nodeRef, updatedNodeCount int) error
-	templateNodeInfo(nodegroup string) (*schedulernodeinfo.NodeInfo, error)
+// configFile is used to read and store information from the cloud configuration file
+type configFile struct {
+	clusterName string `gcfg:"cluster-name"`
 }
 
-func createVsphereManager(configReader io.Reader, discoverOpts cloudprovider.NodeGroupDiscoveryOptions, opts config.AutoscalingOptions) (vsphereManager, error) {
-	// Get manager from env var, options: rest, vim, pbm
-	// Ref: https://github.com/terraform-providers/terraform-provider-vsphere/blob/master/vsphere/config.go#L33
-	manager, ok := os.LookupEnv("VSPHERE_MANAGER")
-	if !ok {
-		manager = defaultManager
+type vsphereManager struct {
+	clusterName string
+}
+
+func newVsphereManager(configReader io.Reader, discoverOpts cloudprovider.NodeGroupDiscoveryOptions, opts config.AutoscalingOptions) (*vsphereManager, error) {
+	var cfg configFile
+	if configReader != nil {
+		if err := gcfg.ReadInto(&cfg, configReader); err != nil {
+			klog.Errorf("Couldn't read config: %v", err)
+			return nil, err
+		}
 	}
 
-	switch manager {
-	case "rest":
-		return createVsphereManagerRest(configReader, discoverOpts, opts)
+	if opts.ClusterName == "" && cfg.clusterName == "" {
+		klog.Fatalf("The cluster-name parameter must be set")
+	} else if opts.ClusterName != "" && cfg.clusterName == "" {
+		cfg.clusterName = opts.ClusterName
 	}
-	return nil, fmt.Errorf("vsphere manager does not exist: %s", manager)
+
+	manager := &vsphereManager{
+		clusterName: cfg.clusterName,
+	}
+	return manager, nil
+}
+
+func (mgr *vsphereManager) nodeGroupSize(nodegroup string) (int, error) {
+	return 0, cloudprovider.ErrNotImplemented
+}
+
+func (mgr *vsphereManager) createNodes(nodegroup string, nodes int) error {
+	return cloudprovider.ErrNotImplemented
+}
+
+// getNodes should return VM ID for all nodes in the node group,
+// used to find any nodes which are unregistered in kubernetes.
+func (mgr *vsphereManager) getNodes(nodegroup string) ([]string, error) {
+	return nil, cloudprovider.ErrNotImplemented
+}
+	
+func (mgr *vsphereManager) getNodeNames(nodegroup string) ([]string, error) {
+	return nil, cloudprovider.ErrNotImplemented
+}
+
+func (mgr *vsphereManager) deleteNodes(nodegroup string, nodes []nodeRef, updatedNodeCount int) error {
+	return cloudprovider.ErrNotImplemented
+}
+
+func (mgr *vsphereManager) templateNodeInfo(nodegroup string) (*schedulernodeinfo.NodeInfo, error) {
+	return nil, cloudprovider.ErrNotImplemented
 }

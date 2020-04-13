@@ -1,6 +1,8 @@
 package vsphere
 
 import (
+	"fmt"
+
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider"
 	schedulernodeinfo "k8s.io/kubernetes/pkg/scheduler/nodeinfo"
@@ -53,7 +55,15 @@ func (ng *vsphereNodeGroup) Debug() string {
 }
 
 func (ng *vsphereNodeGroup) Nodes() ([]cloudprovider.Instance, error) {
-	return nil, cloudprovider.ErrNotImplemented
+	nodes, err := ng.vsphereManager.getNodes(ng.id)
+	if err != nil {
+		return nil, fmt.Errorf("could not get nodes: %v", err)
+	}
+	var instances []cloudprovider.Instance
+	for _, node := range nodes {
+		instances = append(instances, cloudprovider.Instance{Id: node})
+	}
+	return instances, nil
 }
 
 func (ng *vsphereNodeGroup) TemplateNodeInfo() (*schedulernodeinfo.NodeInfo, error) {
