@@ -74,6 +74,7 @@ func (ng *vsphereNodeGroup) TemplateNodeInfo() (*schedulernodeinfo.NodeInfo, err
 	return nil, cloudprovider.ErrNotImplemented
 }
 
+// Exist return if this node group exists, currently always return true
 func (ng *vsphereNodeGroup) Exist() bool {
 	return true
 }

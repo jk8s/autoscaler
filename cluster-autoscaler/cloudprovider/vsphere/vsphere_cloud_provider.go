@@ -41,7 +41,16 @@ func (vcp *vsphereCloudProvider) Name() string {
 
 // NodeGroups returns all node groups managed by the cloud provider
 func (vcp *vsphereCloudProvider) NodeGroups() []cloudprovider.NodeGroup {
-	return nil
+	groups := make([]cloudprovider.NodeGroup, len(vcp.nodeGroups))
+	for i, group := range vcp.nodeGroups {
+		groups[i] = &group
+	}
+	return groups
+}
+
+// AddNodeGroup appends a node group to the list of node groups managed by this cluster provider
+func (vcp *vsphereCloudProvider) AddNodeGroup(group vsphereNodeGroup) {
+	vcp.nodeGroups = append(vcp.nodeGroups, group)
 }
 
 // NodeGroupForNode returns the node group that a given node belongs to.
@@ -144,8 +153,7 @@ func BuildVsphere(opts config.AutoscalingOptions, do cloudprovider.NodeGroupDisc
 		}
 		klog.Infof("Found node group %s with size of %d nodes", ng.id, *ng.targetSize)
 
-		// TODO(giri): Call and implement AddNodeGroup
-		// provider.(*vsphereCloudProvider).AddNodeGroup(ng)
+		provider.(*vsphereCloudProvider).AddNodeGroup(ng)
 	}
 
 	return provider
