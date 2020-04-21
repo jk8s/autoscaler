@@ -10,9 +10,20 @@ import (
 	"github.com/vmware/govmomi/vapi/rest"
 	"github.com/vmware/govmomi/vapi/tags"
 	"github.com/vmware/govmomi/vim25"
+	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/soap"
 	"k8s.io/klog"
 )
+
+// Contain is helper function to determine of a node is part of nodeGroups
+func Contain(node mo.Reference, nodeGroups []mo.Reference) bool {
+	for _, ng := range nodeGroups {
+		if node == ng {
+			return true
+		}
+	}
+	return false
+}
 
 // VsphereClient is the client connection manager which
 // holds connections to various API endpoints we need to interface
@@ -29,6 +40,34 @@ func (c *VsphereClient) TagsManager() (*tags.Manager, error) {
 	return tags.NewManager(c.restClient), nil
 }
 
+func (c *VsphereClient) ContainObjects(parentObjects, childObjects []mo.Reference) ([]mo.Reference) {
+	var containedObjects []mo.Reference
+	for _, c := range childObjects {
+		if Contain(c, parentObjects) {
+			containedObjects = append(containedObjects, c)
+		}
+	}
+	return containedObjects	
+}
+
+func (c *VsphereClient) GetTagID(tag string) string {
+	tm, _ := c.TagsManager()
+	tags, _ := tm.GetTags(context.TODO())
+	for _, t := range tags {
+		if t.Name == tag {
+			return t.ID
+		}
+	}
+	return ""
+}
+
+func (c *VsphereClient) GetObjectsFromTag(tag string) []mo.Reference {
+	tm, _ := c.TagsManager()
+	tagID := c.GetTagID(tag)
+	objects, _ := tm.ListAttachedObjects(context.TODO(), tagID)
+	return objects
+}
+
 // Config holds the vsphere client configuration
 type Config struct {
 	InsecureFlag bool
@@ -40,7 +79,13 @@ type Config struct {
 // NewConfig returns a new config
 func NewConfig(user, password, vsphereServer string, insecureFlag bool) (*Config, error) {
 	if vsphereServer == "" {
-		return nil, fmt.Errorf("vsphere_server must be provided")
+		return nil, fmt.Errorf("vsphere-server must be provided")
+	}
+	if user == "" {
+		return nil, fmt.Errorf("vsphere-user must be provided")
+	}
+	if password == "" {
+		return nil, fmt.Errorf("vsphere-password must be provided")
 	}
 	c := &Config{
 		InsecureFlag: insecureFlag,

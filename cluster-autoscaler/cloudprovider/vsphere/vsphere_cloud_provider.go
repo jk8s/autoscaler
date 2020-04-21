@@ -8,6 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider"
 	"k8s.io/autoscaler/cluster-autoscaler/config"
+	"k8s.io/autoscaler/cluster-autoscaler/config/dynamic"
 	"k8s.io/autoscaler/cluster-autoscaler/utils/errors"
 	"k8s.io/klog"
 )
@@ -43,9 +44,13 @@ func (vcp *vsphereCloudProvider) NodeGroups() []cloudprovider.NodeGroup {
 	return nil
 }
 
-// NodeGroupForNode returns the node group to list of node groups managed by the cloud provider
-func (vcp *vsphereCloudProvider) NodeGroupForNode(*apiv1.Node) (cloudprovider.NodeGroup, error) {
-	return nil, cloudprovider.ErrNotImplemented
+// NodeGroupForNode returns the node group that a given node belongs to.
+// Only single node group is currently supported, the first node group is always returned.
+func (vcp *vsphereCloudProvider) NodeGroupForNode(node *apiv1.Node) (cloudprovider.NodeGroup, error) {
+	if _, found := node.ObjectMeta.Labels["node-role.kubernetes.io/master"]; found {
+		return nil, nil
+	}
+	return &(vcp.nodeGroups[0]), nil
 }
 
 // Pricing is not implemented
@@ -111,5 +116,37 @@ func BuildVsphere(opts config.AutoscalingOptions, do cloudprovider.NodeGroupDisc
 	if err != nil {
 		klog.Fatalf("Failed to create vsphere cloud provider: %v", err)
 	}
+
+	if len(do.NodeGroupSpecs) == 0 {
+		klog.Fatalf("Must specify at least one node group with --nodes=<min>:<max>:<name>,...")
+	}
+
+	if len(do.NodeGroupSpecs) > 1 {
+		klog.Fatalf("Vsphere autoscaler only supports a single nodegroup for now")
+	}
+
+	for _, nodeGroupSpec := range do.NodeGroupSpecs {
+		spec, err := dynamic.SpecFromString(nodeGroupSpec, supportScaleToZero)
+		if err != nil {
+			klog.Fatalf("Could not parse node group sepc %s: %v", nodeGroupSpec, err)
+		}
+
+		ng := vsphereNodeGroup{
+			vsphereManager: *manager,
+			id: spec.Name,
+			minSize: spec.MinSize,
+			maxSize: spec.MaxSize,
+			targetSize: new(int),
+		}
+		*ng.targetSize, err = ng.vsphereManager.nodeGroupSize(ng.id)
+		if err != nil {
+			klog.Fatalf("Could not set current nodes in node group: %v", err)
+		}
+		klog.Infof("Found node group %s with size of %d nodes", ng.id, *ng.targetSize)
+
+		// TODO(giri): Call and implement AddNodeGroup
+		// provider.(*vsphereCloudProvider).AddNodeGroup(ng)
+	}
+
 	return provider
 }

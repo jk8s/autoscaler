@@ -22,17 +22,27 @@ type nodeRef struct {
 	ips []string
 }
 
-// configFile is used to read and store information from the cloud configuration file
-type configFile struct {
-	clusterName string `gcfg:"cluster-name"`
+// ConfigVsphere is used to read and store information from the cloud configuration file
+type ConfigVsphere struct {
+	ClusterName string `gcfg:"cluster-name"`
+	VsphereServer string `gcfg:"vsphere-server"`
+	VsphereUsername string `gcfg:"vsphere-username"`
+	VspherePassword string `gcfg:"vsphere-password"`
+	VsphereInsecureFlag bool `gcfg:"vsphere-insecure"`
+}
+
+// ConfigFile is used to read and store information from the cloud configuration file
+type ConfigFile struct {
+	Vsphere ConfigVsphere `gcfg:"vsphere"`
 }
 
 type vsphereManager struct {
 	clusterName string
+	vsphereClient *VsphereClient
 }
 
 func newVsphereManager(configReader io.Reader, discoverOpts cloudprovider.NodeGroupDiscoveryOptions, opts config.AutoscalingOptions) (*vsphereManager, error) {
-	var cfg configFile
+	var cfg ConfigFile
 	if configReader != nil {
 		if err := gcfg.ReadInto(&cfg, configReader); err != nil {
 			klog.Errorf("Couldn't read config: %v", err)
@@ -40,20 +50,39 @@ func newVsphereManager(configReader io.Reader, discoverOpts cloudprovider.NodeGr
 		}
 	}
 
-	if opts.ClusterName == "" && cfg.clusterName == "" {
+	if opts.ClusterName == "" && cfg.Vsphere.ClusterName == "" {
 		klog.Fatalf("The cluster-name parameter must be set")
-	} else if opts.ClusterName != "" && cfg.clusterName == "" {
-		cfg.clusterName = opts.ClusterName
+	} else if opts.ClusterName != "" && cfg.Vsphere.ClusterName == "" {
+		cfg.Vsphere.ClusterName = opts.ClusterName
 	}
 
+	config, err := NewConfig(cfg.Vsphere.VsphereUsername, cfg.Vsphere.VspherePassword, cfg.Vsphere.VsphereServer, cfg.Vsphere.VsphereInsecureFlag)
+	if err != nil {
+		klog.Fatalf("Vsphere config is invalid")
+		return nil, err
+	}
+
+	vsphereClient, err := config.Client()
+	if err != nil {
+		klog.Fatalf("Failed initializing vsphere client")
+		return nil, err
+	}
+
+	klog.Infof("Starting vsphere manager with config: %v", cfg)
 	manager := &vsphereManager{
-		clusterName: cfg.clusterName,
+		clusterName: cfg.Vsphere.ClusterName,
+		vsphereClient: vsphereClient,
 	}
 	return manager, nil
 }
 
-func (mgr *vsphereManager) nodeGroupSize(nodegroup string) (int, error) {
-	return 0, cloudprovider.ErrNotImplemented
+// nodeGroupSize gets the current size of the nodegroup as reported by vsphere tags
+func (mgr *vsphereManager) nodeGroupSize(nodeGroup string) (int, error) {
+	clusterMachines := mgr.vsphereClient.GetObjectsFromTag("k8s-cluster-"+mgr.clusterName)
+	nodeGroupMachines := mgr.vsphereClient.GetObjectsFromTag("k8s-nodegroup-"+nodeGroup)
+	nodes := mgr.vsphereClient.ContainObjects(clusterMachines, nodeGroupMachines)
+	klog.V(3).Infof("Nodegroup %s: %d/%d", nodeGroup, len(nodes), len(clusterMachines))
+	return len(nodes), nil
 }
 
 func (mgr *vsphereManager) createNodes(nodegroup string, nodes int) error {

@@ -8,6 +8,10 @@ import (
 	schedulernodeinfo "k8s.io/kubernetes/pkg/scheduler/nodeinfo"
 )
 
+const (
+	supportScaleToZero = false
+)
+
 // vsphereNodeGroup implements NodeGroup interface from cluster-autoscaler/cloudprovider
 //
 // A NodeGroup represents a homogenous collection of nodes within a cluster,
