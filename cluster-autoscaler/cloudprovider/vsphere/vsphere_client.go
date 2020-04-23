@@ -3,15 +3,18 @@ package vsphere
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/url"
 
 	"github.com/vmware/govmomi"
+	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/session"
 	"github.com/vmware/govmomi/vapi/rest"
 	"github.com/vmware/govmomi/vapi/tags"
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/soap"
+	"github.com/vmware/govmomi/vim25/types"
 	"k8s.io/klog"
 )
 
@@ -66,6 +69,53 @@ func (c *VsphereClient) GetObjectsFromTag(tag string) []mo.Reference {
 	tagID := c.GetTagID(tag)
 	objects, _ := tm.ListAttachedObjects(context.TODO(), tagID)
 	return objects
+}
+
+func (c *VsphereClient) CreateVirtualMachine(name, datacenter, resourcePool, template string) error {
+	finder := find.NewFinder(c.vimClient.Client, false)
+
+	dc, err := finder.DatacenterOrDefault(context.TODO(), datacenter)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	finder.SetDatacenter(dc)
+
+	pool, err := finder.ResourcePoolOrDefault(context.TODO(), resourcePool)
+	if err != nil {
+		return err
+	}
+
+	folders, err := dc.Folders(context.TODO())
+	if err != nil {
+		return err
+	}
+
+	vm, err := finder.VirtualMachine(context.TODO(), template)
+	if err != nil {
+		return err
+	}
+
+	klog.Infof("Cloning %s to %s...", vm.Reference(), name)
+
+	ref := pool.Reference()
+
+	spec := types.VirtualMachineCloneSpec{
+		Location: types.VirtualMachineRelocateSpec{
+			Pool: &ref,
+		},
+	}
+
+	task, err := vm.Clone(context.TODO(), folders.VmFolder, name, spec)
+	if err != nil {
+		return err
+	}
+
+	err = task.Wait(context.TODO())
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // Config holds the vsphere client configuration

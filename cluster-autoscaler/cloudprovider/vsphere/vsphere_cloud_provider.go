@@ -3,6 +3,7 @@ package vsphere
 import (
 	"io"
 	"os"
+	"sync"
 
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -98,8 +99,12 @@ func (vcp *vsphereCloudProvider) Cleanup() error {
 	return nil
 }
 
-// Refresh is called before every autoscaler main loop
+// Refresh is called before every autoscaler main loop,
+// currently prints debug info only
 func (vcp *vsphereCloudProvider) Refresh() error {
+	for _, ng := range vcp.nodeGroups {
+		klog.V(3).Info(ng.Debug())
+	}
 	return nil
 }
 
@@ -134,6 +139,8 @@ func BuildVsphere(opts config.AutoscalingOptions, do cloudprovider.NodeGroupDisc
 		klog.Fatalf("Vsphere autoscaler only supports a single nodegroup for now")
 	}
 
+	clusterUpdateLock := sync.Mutex{}
+
 	for _, nodeGroupSpec := range do.NodeGroupSpecs {
 		spec, err := dynamic.SpecFromString(nodeGroupSpec, supportScaleToZero)
 		if err != nil {
@@ -143,6 +150,7 @@ func BuildVsphere(opts config.AutoscalingOptions, do cloudprovider.NodeGroupDisc
 		ng := vsphereNodeGroup{
 			vsphereManager: *manager,
 			id: spec.Name,
+			clusterUpdateMutex: &clusterUpdateLock,
 			minSize: spec.MinSize,
 			maxSize: spec.MaxSize,
 			targetSize: new(int),
