@@ -3,11 +3,11 @@ package vsphere
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/url"
 
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/find"
+	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/session"
 	"github.com/vmware/govmomi/vapi/rest"
 	"github.com/vmware/govmomi/vapi/tags"
@@ -71,12 +71,23 @@ func (c *VsphereClient) GetObjectsFromTag(tag string) []mo.Reference {
 	return objects
 }
 
+func (c *VsphereClient) GetVirtualMachineObjectUUID(obj mo.Reference) (string, error) {
+	vm := object.NewVirtualMachine(c.vimClient.Client, obj.Reference())
+
+	var o mo.VirtualMachine
+	err := vm.Common.Properties(context.TODO(), vm.Reference(), []string{"config.uuid"}, &o)
+	if err != nil {
+		return "", err
+	}
+	return o.Config.Uuid, nil
+}
+
 func (c *VsphereClient) CreateVirtualMachine(name, datacenter, resourcePool, template string) error {
 	finder := find.NewFinder(c.vimClient.Client, false)
 
 	dc, err := finder.DatacenterOrDefault(context.TODO(), datacenter)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	finder.SetDatacenter(dc)

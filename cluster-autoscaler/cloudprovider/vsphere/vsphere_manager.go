@@ -101,7 +101,10 @@ func (mgr *vsphereManager) nodeGroupSize(nodeGroup string) (int, error) {
 }
 
 func (mgr *vsphereManager) createNode(name string) error {
-	// TODO(giri): Pass cloud-init
+	// TODO(giri): Pass cloud-init that contains kubeadm join
+
+	// TODO(giri): tag the VM with autoscaler tags ("k8s-cluster-"+mgr.clusterName
+	// and "k8s-nodegroup-"+nodeGroup) to let it join the cluster
 
 	err := mgr.vsphereClient.CreateVirtualMachine(name, mgr.datacenter, mgr.resourcePool, mgr.template)
 	if err != nil {
@@ -123,19 +126,23 @@ func (mgr *vsphereManager) createNodes(nodeGroup string, nodes int) error {
 	return nil
 }
 
-// getNodes should return ProviderIDs (use VM ID as Provider ID) for all nodes in the node group,
+// getNodes should return ProviderIDs (use VM Config UUID as Provider ID) for all nodes in the node group,
 // used to find any nodes which are unregistered in kubernetes.
 func (mgr *vsphereManager) getNodes(nodeGroup string) ([]string, error) {
 	clusterMachines := mgr.vsphereClient.GetObjectsFromTag("k8s-cluster-"+mgr.clusterName)
 	nodeGroupMachines := mgr.vsphereClient.GetObjectsFromTag("k8s-nodegroup-"+nodeGroup)
 	nodes := mgr.vsphereClient.ContainObjects(clusterMachines, nodeGroupMachines)
 	nodeIDs := []string{}
-	for _, n := range nodes {
-		nodeIDs = append(nodeIDs, n.Reference().Value)
+	for _, node := range nodes {
+		nodeID, err := mgr.vsphereClient.GetVirtualMachineObjectUUID(node)
+		if err != nil {
+			return nil, err
+		}
+		nodeIDs = append(nodeIDs, "vsphere://"+nodeID)
 	}
 	return nodeIDs, nil
 }
-	
+
 func (mgr *vsphereManager) getNodeNames(nodeGroup string) ([]string, error) {
 	clusterMachines := mgr.vsphereClient.GetObjectsFromTag("k8s-cluster-"+mgr.clusterName)
 	nodeGroupMachines := mgr.vsphereClient.GetObjectsFromTag("k8s-nodegroup-"+nodeGroup)
